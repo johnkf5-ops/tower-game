@@ -14,6 +14,13 @@ func _ready() -> void:
 	position = Vector2(320, 200)
 	zoom = Vector2(1.0, 1.0)
 
+	# Disable camera limits to allow free scrolling (use max int values)
+	limit_top = -10000000
+	limit_bottom = 10000000
+	limit_left = -10000000
+	limit_right = 10000000
+	limit_smoothed = false
+
 
 func _input(event: InputEvent) -> void:
 	# Middle mouse or right mouse to drag

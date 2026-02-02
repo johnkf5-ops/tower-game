@@ -1,2 +1,4 @@
 res://scripts/building.gd
 res://scripts/main.gd
+res://scripts/ui.gd
+res://scripts/game_camera.gd

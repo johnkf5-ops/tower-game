@@ -10,6 +10,10 @@ script = ExtResource("1_main")
 
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2(640, 360)
+limit_left = -10000000
+limit_top = -10000000
+limit_right = 10000000
+limit_bottom = 10000000
 script = ExtResource("4_camera")
 
 [node name="Building" type="Node2D" parent="."]
@@ -40,12 +44,16 @@ text = "Population: 0"
 layout_mode = 2
 text = "Day 1 - 6:00 AM"
 
+[node name="SatisfactionLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "Rating: [*****] 100%"
+
 [node name="BuildPanel" type="VBoxContainer" parent="UI"]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 10.0
-offset_top = -150.0
+offset_top = -230.0
 offset_right = 200.0
 offset_bottom = -10.0
 
@@ -63,7 +71,15 @@ text = "Elevator ($20,000)"
 
 [node name="OfficeButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
-text = "Office ($10,000)"
+text = "Office ($10,000) - Blue"
+
+[node name="ApartmentButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Apartment ($15,000) - Green"
+
+[node name="RetailButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Retail ($25,000) - Orange"
 
 [node name="SpawnButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
