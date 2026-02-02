@@ -50,10 +50,12 @@ func _connect_ui_signals() -> void:
 	var floor_btn = $UI/BuildPanel/FloorButton
 	var elevator_btn = $UI/BuildPanel/ElevatorButton
 	var office_btn = $UI/BuildPanel/OfficeButton
-	
+	var spawn_btn = $UI/BuildPanel/SpawnButton
+
 	floor_btn.pressed.connect(_on_floor_button_pressed)
 	elevator_btn.pressed.connect(_on_elevator_button_pressed)
 	office_btn.pressed.connect(_on_office_button_pressed)
+	spawn_btn.pressed.connect(_on_spawn_button_pressed)
 
 
 func _update_game_time(delta: float) -> void:
@@ -109,3 +111,7 @@ func _on_office_button_pressed() -> void:
 		set_build_mode(BuildMode.NONE)
 	else:
 		set_build_mode(BuildMode.OFFICE)
+
+
+func _on_spawn_button_pressed() -> void:
+	building.spawn_person()

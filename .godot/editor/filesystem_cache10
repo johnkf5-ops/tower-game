@@ -1,0 +1,14 @@
+63f7b34db8d8cdea90c76aacccf841ec
+::res://::1770069340
+icon.svg::CompressedTexture2D::8840491889243873992::1770060221::1770069094::1::::<><><>0<>0<>a96ee8bdcb4a7dff59fc050835e8fcef<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
+README.md::TextFile::-1::1770060221::0::1::::<><><>0<>0<><>::
+::res://assets/::1770060221
+::res://assets/audio/::1770060221
+::res://assets/sprites/::1770060220
+::res://scenes/::1770060219
+main.tscn::PackedScene::-1::1770060219::0::1::::<><><>0<>0<><>::res://scripts/main.gd<>res://scripts/building.gd<>res://scripts/ui.gd<>res://scripts/game_camera.gd
+::res://scripts/::1770069094
+building.gd::GDScript::2300215351318832463::1770068849::0::1::::<>Node2D<><>0<>0<><>::
+game_camera.gd::GDScript::5117530085051423694::1770060220::0::1::::<>Camera2D<><>0<>0<><>::
+main.gd::GDScript::670681630467412271::1770060220::0::1::::<>Node2D<><>0<>0<><>::
+ui.gd::GDScript::4187194700605524796::1770060220::0::1::::<>CanvasLayer<><>0<>0<><>::
