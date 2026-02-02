@@ -1,0 +1,66 @@
+[gd_scene load_steps=5 format=3 uid="uid://main_scene"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/building.gd" id="2_building"]
+[ext_resource type="Script" path="res://scripts/ui.gd" id="3_ui"]
+[ext_resource type="Script" path="res://scripts/game_camera.gd" id="4_camera"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+script = ExtResource("4_camera")
+
+[node name="Building" type="Node2D" parent="."]
+script = ExtResource("2_building")
+
+[node name="Floors" type="Node2D" parent="Building"]
+
+[node name="Elevators" type="Node2D" parent="Building"]
+
+[node name="People" type="Node2D" parent="Building"]
+
+[node name="UI" type="CanvasLayer" parent="."]
+script = ExtResource("3_ui")
+
+[node name="TopBar" type="HBoxContainer" parent="UI"]
+offset_right = 1280.0
+offset_bottom = 40.0
+
+[node name="MoneyLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "$100,000"
+
+[node name="PopulationLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "Population: 0"
+
+[node name="TimeLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "Day 1 - 6:00 AM"
+
+[node name="BuildPanel" type="VBoxContainer" parent="UI"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = -10.0
+
+[node name="BuildLabel" type="Label" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "BUILD"
+
+[node name="FloorButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Floor ($5,000)"
+
+[node name="ElevatorButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Elevator ($20,000)"
+
+[node name="OfficeButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Office ($10,000)"
