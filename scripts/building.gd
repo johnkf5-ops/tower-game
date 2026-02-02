@@ -8,24 +8,37 @@ const PERSON_SPEED: float = 60.0  # pixels per second
 const PERSON_SIZE: float = 8.0  # dot radius
 const ELEVATOR_CAPACITY: int = 6
 const QUEUE_SPACING: float = 10.0  # horizontal spacing between waiting people
-const PATIENCE_MAX: float = 100.0
-const PATIENCE_DECAY_RATE: float = 5.0  # per second while waiting
+# Stress system (replaces patience - higher = worse)
+const STRESS_MAX: float = 100.0
+const STRESS_RATE: float = 5.0  # per second while waiting
+# Stress colors: green (happy) -> yellow -> orange -> red (angry)
+const STRESS_COLOR_GREEN = Color(0.2, 0.8, 0.2)
+const STRESS_COLOR_YELLOW = Color(0.9, 0.9, 0.2)
+const STRESS_COLOR_ORANGE = Color(0.9, 0.5, 0.1)
+const STRESS_COLOR_RED = Color(0.9, 0.1, 0.1)
 
 # Tenant type colors
 const COLOR_OFFICE = Color(0.3, 0.5, 0.8)  # Blue
 const COLOR_APARTMENT = Color(0.3, 0.7, 0.4)  # Green
-const COLOR_RETAIL = Color(0.9, 0.6, 0.2)  # Orange
+const COLOR_COWORKING = Color(0.2, 0.7, 0.7)  # Teal
+const COLOR_FOOD_COURT = Color(0.9, 0.6, 0.2)  # Orange
+
+# Population per tenant type
+const POP_PER_OFFICE = 6
+const POP_PER_APARTMENT = 4
+const POP_PER_COWORKING = 10
 
 # Tenant types
-enum TenantType { OFFICE, APARTMENT, RETAIL }
+enum TenantType { OFFICE, APARTMENT, COWORKING, FOOD_COURT }
 
 # Data structures
 var floors: Dictionary = {}  # floor_number -> FloorData
 var elevators: Array = []
 var elevator_shafts: Dictionary = {}  # x_position -> ElevatorShaft
-var offices: Array = []  # Array of {floor: int, x: int, type: TenantType}
+var offices: Array = []  # Array of {floor: int, x: int}
 var apartments: Array = []
-var retail: Array = []
+var coworking: Array = []
+var food_courts: Array = []
 var people: Array = []  # Active person nodes
 var waiting_queues: Dictionary = {}  # shaft_x -> {floor_num -> [person, ...]}
 
@@ -303,8 +316,10 @@ func _handle_click(world_pos: Vector2) -> void:
 			_try_build_office(grid_x, floor_num)
 		main.BuildMode.APARTMENT:
 			_try_build_apartment(grid_x, floor_num)
-		main.BuildMode.RETAIL:
-			_try_build_retail(grid_x, floor_num)
+		main.BuildMode.COWORKING:
+			_try_build_coworking(grid_x, floor_num)
+		main.BuildMode.FOOD_COURT:
+			_try_build_food_court(grid_x, floor_num)
 
 
 func _try_build_floor(floor_num: int) -> void:
@@ -392,9 +407,9 @@ func _try_build_office(grid_x: int, floor_num: int) -> void:
 		for i in range(4):
 			floor_data.tiles[grid_x + i] = "office"
 		offices.append({"floor": floor_num, "x": grid_x})
-		_create_tenant_visual(grid_x, floor_num, COLOR_OFFICE)
-		main.change_population(4)
-		print("Built office at floor ", floor_num)
+		_create_tenant_visual(grid_x, floor_num, COLOR_OFFICE, "Office")
+		main.change_population(POP_PER_OFFICE)
+		print("Built office at floor ", floor_num, " (+", POP_PER_OFFICE, " workers)")
 
 
 func _try_build_apartment(grid_x: int, floor_num: int) -> void:
@@ -420,19 +435,22 @@ func _try_build_apartment(grid_x: int, floor_num: int) -> void:
 		for i in range(4):
 			floor_data.tiles[grid_x + i] = "apartment"
 		apartments.append({"floor": floor_num, "x": grid_x})
-		_create_tenant_visual(grid_x, floor_num, COLOR_APARTMENT)
-		main.change_population(2)  # Apartment has 2 residents
-		print("Built apartment at floor ", floor_num)
+		_create_tenant_visual(grid_x, floor_num, COLOR_APARTMENT, "Apt")
+		main.change_population(POP_PER_APARTMENT)
+		print("Built apartment at floor ", floor_num, " (+", POP_PER_APARTMENT, " residents)")
 
 
-func _try_build_retail(grid_x: int, floor_num: int) -> void:
+func _try_build_coworking(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("coworking"):
+		print("Coworking not unlocked yet")
+		return
+
 	if not floors.has(floor_num):
 		print("Need a floor first")
 		return
 
-	# Retail must be on lobby or floor 1
-	if floor_num > 1:
-		print("Retail must be on lobby or floor 1")
+	if floors[floor_num].is_lobby:
+		print("Can't build coworking in lobby")
 		return
 
 	if grid_x < 0 or grid_x + 4 > FLOOR_WIDTH:
@@ -445,12 +463,45 @@ func _try_build_retail(grid_x: int, floor_num: int) -> void:
 			print("Space occupied")
 			return
 
-	if main.spend_money(25000):
+	if main.spend_money(8000):
 		for i in range(4):
-			floor_data.tiles[grid_x + i] = "retail"
-		retail.append({"floor": floor_num, "x": grid_x})
-		_create_tenant_visual(grid_x, floor_num, COLOR_RETAIL)
-		print("Built retail at floor ", floor_num)
+			floor_data.tiles[grid_x + i] = "coworking"
+		coworking.append({"floor": floor_num, "x": grid_x})
+		_create_tenant_visual(grid_x, floor_num, COLOR_COWORKING, "CoWork")
+		main.change_population(POP_PER_COWORKING)
+		print("Built coworking at floor ", floor_num, " (+", POP_PER_COWORKING, " workers)")
+
+
+func _try_build_food_court(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("food_court"):
+		print("Food court not unlocked yet")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	# Food court must be on lobby or floor 1
+	if floor_num > 1:
+		print("Food court must be on lobby or floor 1")
+		return
+
+	if grid_x < 0 or grid_x + 4 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(4):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(12000):
+		for i in range(4):
+			floor_data.tiles[grid_x + i] = "food_court"
+		food_courts.append({"floor": floor_num, "x": grid_x})
+		_create_tenant_visual(grid_x, floor_num, COLOR_FOOD_COURT, "Food")
+		print("Built food court at floor ", floor_num)
 
 
 func _try_call_elevator(grid_x: int, floor_num: int) -> void:
@@ -580,7 +631,7 @@ func _update_elevator_visual(shaft_x: int) -> void:
 	elevators_node.move_child(shaft_visual, 0)  # Behind cars
 
 
-func _create_tenant_visual(grid_x: int, floor_num: int, color: Color) -> void:
+func _create_tenant_visual(grid_x: int, floor_num: int, color: Color, label_text: String = "") -> void:
 	var floor_node = floors_node.get_node("Floor_" + str(floor_num))
 	if not floor_node:
 		return
@@ -590,6 +641,15 @@ func _create_tenant_visual(grid_x: int, floor_num: int, color: Color) -> void:
 	tenant.position = Vector2(grid_x * TILE_WIDTH + 2, 4)
 	tenant.color = color
 	floor_node.add_child(tenant)
+
+	# Add label
+	if label_text != "":
+		var label = Label.new()
+		label.text = label_text
+		label.position = Vector2(grid_x * TILE_WIDTH + 8, 18)
+		label.add_theme_color_override("font_color", Color.WHITE)
+		label.add_theme_font_size_override("font_size", 12)
+		floor_node.add_child(label)
 
 
 func get_floor_y(floor_num: int) -> float:
@@ -610,37 +670,39 @@ func _update_schedules() -> void:
 
 	var hour_int = int(hour)
 
-	# Office workers ARRIVE 8-9am
+	# ===== OFFICES: 8-9am arrive, 5-6pm leave =====
 	if hour_int >= 8 and hour_int < 9:
 		for office in offices:
-			if randf() < 0.1:  # 10% chance per minute per office
-				_spawn_office_worker(office, true)  # arriving
+			if randf() < 0.15:  # 15% chance per minute per office
+				_spawn_office_worker(office)
 
-	# Office workers LEAVE 5-6pm
 	if hour_int >= 17 and hour_int < 18:
-		_trigger_office_departure()
+		_trigger_tenant_departure(TenantType.OFFICE)
 
-	# Apartment residents LEAVE 7-9am
+	# ===== APARTMENTS: 7-9am leave, 6-9pm return =====
 	if hour_int >= 7 and hour_int < 9:
-		_trigger_apartment_departure()
+		_trigger_tenant_departure(TenantType.APARTMENT)
 
-	# Apartment residents RETURN 6-9pm
 	if hour_int >= 18 and hour_int < 21:
 		for apt in apartments:
-			if randf() < 0.08:  # 8% chance per minute
-				_spawn_apartment_resident(apt, true)  # returning home
+			if randf() < 0.1:  # 10% chance per minute
+				_spawn_apartment_resident(apt)
 
-	# Retail customers throughout day, peak at lunch
-	if hour_int >= 10 and hour_int < 20:
-		var retail_chance = 0.05
-		if hour_int >= 11 and hour_int < 14:  # Lunch peak
-			retail_chance = 0.15
-		for shop in retail:
-			if randf() < retail_chance:
-				_spawn_retail_customer(shop)
+	# ===== COWORKING: Random throughout day (8am-8pm) =====
+	if hour_int >= 8 and hour_int < 20:
+		for space in coworking:
+			if randf() < 0.03:  # Low but steady chance
+				_spawn_coworking_worker(space)
+		# Also random departures
+		if randf() < 0.02:
+			_trigger_tenant_departure(TenantType.COWORKING)
+
+	# ===== FOOD COURT: Lunch traffic 11am-2pm =====
+	if hour_int >= 11 and hour_int < 14:
+		_spawn_food_court_customers()
 
 
-func _spawn_office_worker(office: Dictionary, arriving: bool) -> void:
+func _spawn_office_worker(office: Dictionary) -> void:
 	if elevator_shafts.is_empty():
 		return
 
@@ -654,6 +716,7 @@ func _spawn_office_worker(office: Dictionary, arriving: bool) -> void:
 	var person = _create_person(COLOR_OFFICE, TenantType.OFFICE)
 	person.set_meta("home_floor", 0)  # Workers come from outside
 	person.set_meta("work_floor", dest_floor)
+	person.set_meta("work_x", dest_x)
 	person.set_meta("dest_floor", dest_floor)
 	person.set_meta("dest_x", dest_x)
 	person.set_meta("shaft_x", shaft_x)
@@ -664,7 +727,7 @@ func _spawn_office_worker(office: Dictionary, arriving: bool) -> void:
 	person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
-func _spawn_apartment_resident(apt: Dictionary, returning: bool) -> void:
+func _spawn_apartment_resident(apt: Dictionary) -> void:
 	if elevator_shafts.is_empty():
 		return
 
@@ -688,52 +751,91 @@ func _spawn_apartment_resident(apt: Dictionary, returning: bool) -> void:
 	person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
-func _spawn_retail_customer(shop: Dictionary) -> void:
+func _spawn_coworking_worker(space: Dictionary) -> void:
 	if elevator_shafts.is_empty():
 		return
 
-	var shop_floor = shop["floor"]
-	var shop_x = shop["x"]
+	var dest_floor = space["floor"]
+	var dest_x = space["x"]
 
-	# Retail on lobby doesn't need elevator
-	if shop_floor == 0:
-		var person = _create_person(COLOR_RETAIL, TenantType.RETAIL)
-		person.set_meta("dest_floor", 0)
-		person.set_meta("dest_x", shop_x)
-		person.set_meta("shaft_x", -1)
-		person.position = Vector2(20.0, FLOOR_HEIGHT - PERSON_SIZE)
-		person.set_meta("current_floor", 0)
-		person.set_meta("state", PersonState.WALKING_TO_DEST)
-		return
-
-	var shaft_x = _find_usable_shaft(0, shop_floor)
+	var shaft_x = _find_usable_shaft(0, dest_floor)
 	if shaft_x == -1:
 		return
 
-	var person = _create_person(COLOR_RETAIL, TenantType.RETAIL)
-	person.set_meta("dest_floor", shop_floor)
-	person.set_meta("dest_x", shop_x)
+	var person = _create_person(COLOR_COWORKING, TenantType.COWORKING)
+	person.set_meta("work_floor", dest_floor)
+	person.set_meta("work_x", dest_x)
+	person.set_meta("dest_floor", dest_floor)
+	person.set_meta("dest_x", dest_x)
 	person.set_meta("shaft_x", shaft_x)
+
+	# Spawn at lobby entrance
 	person.position = Vector2(20.0, FLOOR_HEIGHT - PERSON_SIZE)
 	person.set_meta("current_floor", 0)
 	person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
-func _trigger_office_departure() -> void:
-	# Find workers at their desks and send them home
-	for person in people:
-		if person.get_meta("state") == PersonState.AT_DEST:
-			if person.get_meta("tenant_type") == TenantType.OFFICE:
-				if randf() < 0.1:  # 10% chance per minute
-					_send_person_to_lobby(person)
+func _spawn_food_court_customers() -> void:
+	# Food court customers come from offices/apartments in the building
+	if food_courts.is_empty():
+		return
+
+	# Pick a random food court
+	var fc = food_courts[randi() % food_courts.size()]
+	var fc_floor = fc["floor"]
+	var fc_x = fc["x"]
+
+	# Try to spawn from an office worker or apartment resident
+	var source_tenants = []
+	source_tenants.append_array(offices)
+	source_tenants.append_array(apartments)
+	source_tenants.append_array(coworking)
+
+	if source_tenants.is_empty():
+		return
+
+	# Random chance per food court
+	if randf() > 0.15:
+		return
+
+	var source = source_tenants[randi() % source_tenants.size()]
+	var source_floor = source["floor"]
+
+	# Need elevator if not on same floor as food court
+	if source_floor == fc_floor:
+		# Walk directly
+		var person = _create_person(COLOR_FOOD_COURT, TenantType.FOOD_COURT)
+		person.set_meta("source_floor", source_floor)
+		person.set_meta("dest_floor", fc_floor)
+		person.set_meta("dest_x", fc_x)
+		person.set_meta("shaft_x", -1)
+		person.position = Vector2(source["x"] * TILE_WIDTH + TILE_WIDTH * 2, -source_floor * FLOOR_HEIGHT + FLOOR_HEIGHT - PERSON_SIZE)
+		person.set_meta("current_floor", source_floor)
+		person.set_meta("state", PersonState.WALKING_TO_DEST)
+	else:
+		var shaft_x = _find_usable_shaft(source_floor, fc_floor)
+		if shaft_x == -1:
+			return
+
+		var person = _create_person(COLOR_FOOD_COURT, TenantType.FOOD_COURT)
+		person.set_meta("source_floor", source_floor)
+		person.set_meta("dest_floor", fc_floor)
+		person.set_meta("dest_x", fc_x)
+		person.set_meta("shaft_x", shaft_x)
+		person.position = Vector2(source["x"] * TILE_WIDTH + TILE_WIDTH * 2, -source_floor * FLOOR_HEIGHT + FLOOR_HEIGHT - PERSON_SIZE)
+		person.set_meta("current_floor", source_floor)
+		person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
-func _trigger_apartment_departure() -> void:
-	# Find residents at home and send them out
+func _trigger_tenant_departure(tenant_type: TenantType) -> void:
+	# Find people at their destination and send them home/out
 	for person in people:
 		if person.get_meta("state") == PersonState.AT_DEST:
-			if person.get_meta("tenant_type") == TenantType.APARTMENT:
-				if randf() < 0.08:
+			if person.get_meta("tenant_type") == tenant_type:
+				var chance = 0.1 if tenant_type == TenantType.OFFICE else 0.08
+				if tenant_type == TenantType.COWORKING:
+					chance = 0.05  # Coworking has random departures
+				if randf() < chance:
 					_send_person_to_lobby(person)
 
 
@@ -749,7 +851,7 @@ func _send_person_to_lobby(person: Node2D) -> void:
 
 	person.set_meta("dest_floor", 0)
 	person.set_meta("shaft_x", shaft_x)
-	person.set_meta("patience", PATIENCE_MAX)  # Reset patience
+	person.set_meta("stress", 0.0)  # Reset stress
 	person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
@@ -759,13 +861,13 @@ func _create_person(color: Color, tenant_type: TenantType) -> Node2D:
 
 	person.set_meta("tenant_type", tenant_type)
 	person.set_meta("elevator_car", null)
-	person.set_meta("patience", PATIENCE_MAX)
+	person.set_meta("stress", 0.0)  # Start with no stress (happy)
 
 	var dot = ColorRect.new()
 	dot.name = "Dot"
 	dot.size = Vector2(PERSON_SIZE, PERSON_SIZE)
 	dot.position = Vector2(-PERSON_SIZE / 2, -PERSON_SIZE)
-	dot.color = color
+	dot.color = STRESS_COLOR_GREEN  # Start green (happy)
 	person.set_meta("original_color", color)
 	person.add_child(dot)
 
@@ -776,14 +878,27 @@ func _create_person(color: Color, tenant_type: TenantType) -> Node2D:
 
 # Legacy spawn for testing
 func spawn_person() -> void:
-	if offices.size() > 0:
-		_spawn_office_worker(offices[randi() % offices.size()], true)
-	elif apartments.size() > 0:
-		_spawn_apartment_resident(apartments[randi() % apartments.size()], true)
-	elif retail.size() > 0:
-		_spawn_retail_customer(retail[randi() % retail.size()])
-	else:
+	# Collect all tenant types
+	var all_tenants = []
+	for o in offices:
+		all_tenants.append({"type": "office", "data": o})
+	for a in apartments:
+		all_tenants.append({"type": "apartment", "data": a})
+	for c in coworking:
+		all_tenants.append({"type": "coworking", "data": c})
+
+	if all_tenants.is_empty():
 		print("No tenants to spawn")
+		return
+
+	var choice = all_tenants[randi() % all_tenants.size()]
+	match choice["type"]:
+		"office":
+			_spawn_office_worker(choice["data"])
+		"apartment":
+			_spawn_apartment_resident(choice["data"])
+		"coworking":
+			_spawn_coworking_worker(choice["data"])
 
 
 func _find_usable_shaft(from_floor: int, to_floor: int) -> int:
@@ -920,24 +1035,40 @@ func _person_wait_for_elevator(person: Node2D, delta: float) -> void:
 	var shaft_x: int = person.get_meta("shaft_x")
 	var current_floor: int = person.get_meta("current_floor")
 
-	# Decay patience while waiting
-	var patience: float = person.get_meta("patience")
-	patience -= PATIENCE_DECAY_RATE * delta
-	person.set_meta("patience", patience)
+	# Increase stress while waiting
+	var stress: float = person.get_meta("stress")
+	stress += STRESS_RATE * delta
+	person.set_meta("stress", stress)
 
-	# Update color based on patience (fade to red as patience decreases)
+	# Update color based on stress level (green -> yellow -> orange -> red)
 	var dot = person.get_node("Dot")
-	var original_color: Color = person.get_meta("original_color")
-	var anger_ratio = 1.0 - (patience / PATIENCE_MAX)
-	dot.color = original_color.lerp(Color.RED, anger_ratio)
+	dot.color = _get_stress_color(stress)
 
-	# Check if patience ran out
-	if patience <= 0:
+	# Check if stress maxed out
+	if stress >= STRESS_MAX:
 		_person_become_angry(person, shaft_x, current_floor)
 		return
 
 	# Keep queue position updated
 	_update_queue_positions(shaft_x, current_floor)
+
+
+func _get_stress_color(stress: float) -> Color:
+	# Green (0%) -> Yellow (33%) -> Orange (66%) -> Red (100%)
+	var stress_ratio = stress / STRESS_MAX
+
+	if stress_ratio < 0.33:
+		# Green to Yellow
+		var t = stress_ratio / 0.33
+		return STRESS_COLOR_GREEN.lerp(STRESS_COLOR_YELLOW, t)
+	elif stress_ratio < 0.66:
+		# Yellow to Orange
+		var t = (stress_ratio - 0.33) / 0.33
+		return STRESS_COLOR_YELLOW.lerp(STRESS_COLOR_ORANGE, t)
+	else:
+		# Orange to Red
+		var t = (stress_ratio - 0.66) / 0.34
+		return STRESS_COLOR_ORANGE.lerp(STRESS_COLOR_RED, t)
 
 
 func _person_ride_elevator(person: Node2D, _delta: float) -> void:
@@ -967,11 +1098,10 @@ func _person_walk_to_dest(person: Node2D, delta: float) -> void:
 	if abs(distance) <= move_amount:
 		person.position.x = target_x
 		person.set_meta("state", PersonState.AT_DEST)
-		# Record satisfaction based on remaining patience
-		var patience: float = person.get_meta("patience")
-		var trip_satisfaction = patience / PATIENCE_MAX  # 0.0 to 1.0
+		# Record satisfaction based on stress (lower stress = higher satisfaction)
+		var stress: float = person.get_meta("stress")
+		var trip_satisfaction = 1.0 - (stress / STRESS_MAX)  # 0.0 to 1.0
 		_record_satisfaction(trip_satisfaction)
-		var tenant_type = person.get_meta("tenant_type")
 		print("Person arrived at destination (satisfaction: ", snapped(trip_satisfaction * 100, 1), "%)")
 	else:
 		person.position.x += sign(distance) * move_amount
@@ -986,9 +1116,9 @@ func _person_walk_to_exit(person: Node2D, delta: float) -> void:
 	var move_amount = PERSON_SPEED * delta
 
 	if abs(distance) <= move_amount:
-		# Record satisfaction for completed trip
-		var patience: float = person.get_meta("patience")
-		var trip_satisfaction = patience / PATIENCE_MAX
+		# Record satisfaction for completed trip (lower stress = higher satisfaction)
+		var stress: float = person.get_meta("stress")
+		var trip_satisfaction = 1.0 - (stress / STRESS_MAX)
 		_record_satisfaction(trip_satisfaction)
 		_remove_person(person)
 	else:

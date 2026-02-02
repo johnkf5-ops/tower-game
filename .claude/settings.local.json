@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nTenant types, schedules, multi-car elevators\n\n- Add apartment \\($15k, green\\) and retail \\($25k, orange\\) tenant types\n- Offices are now blue colored for visual distinction\n- Implement tenant schedules creating rush hours:\n  - Office workers: arrive 8-9am, leave 5-6pm\n  - Apartment residents: leave 7-9am, return 6-9pm\n  - Retail customers: throughout day, peak at lunch\n- Retail restricted to lobby or floor 1\n- Rent collection includes all tenant types with satisfaction multiplier\n- Multiple elevator cars per shaft \\($10k per additional car\\)\n- Smart dispatching sends nearest available car\n- Cars can pass through each other \\(no collision\\)\n- Car count displayed at top of each shaft\n- Each car has unique color tint and number label\n- Fix camera limits for 100+ floor scrolling\n- Constrain elevators to floor bounds\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nTenant types, schedules, multi-car elevators\n\n- Add apartment \\($15k, green\\) and retail \\($25k, orange\\) tenant types\n- Offices are now blue colored for visual distinction\n- Implement tenant schedules creating rush hours:\n  - Office workers: arrive 8-9am, leave 5-6pm\n  - Apartment residents: leave 7-9am, return 6-9pm\n  - Retail customers: throughout day, peak at lunch\n- Retail restricted to lobby or floor 1\n- Rent collection includes all tenant types with satisfaction multiplier\n- Multiple elevator cars per shaft \\($10k per additional car\\)\n- Smart dispatching sends nearest available car\n- Cars can pass through each other \\(no collision\\)\n- Car count displayed at top of each shaft\n- Each car has unique color tint and number label\n- Fix camera limits for 100+ floor scrolling\n- Constrain elevators to floor bounds\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git commit:*)"
     ]
   }
 }

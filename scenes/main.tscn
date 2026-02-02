@@ -46,15 +46,19 @@ text = "Day 1 - 6:00 AM"
 
 [node name="SatisfactionLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
-text = "Rating: [*****] 100%"
+text = "Satisfaction: 100%"
+
+[node name="StarLabel" type="Label" parent="UI/TopBar"]
+layout_mode = 2
+text = "[*....] -> 1,000 (0%)"
 
 [node name="BuildPanel" type="VBoxContainer" parent="UI"]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 10.0
-offset_top = -230.0
-offset_right = 200.0
+offset_top = -320.0
+offset_right = 220.0
 offset_bottom = -10.0
 
 [node name="BuildLabel" type="Label" parent="UI/BuildPanel"]
@@ -71,16 +75,47 @@ text = "Elevator ($20,000)"
 
 [node name="OfficeButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
-text = "Office ($10,000) - Blue"
+text = "Office ($10k) +6 workers"
 
 [node name="ApartmentButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
-text = "Apartment ($15,000) - Green"
+text = "Apartment ($15k) +4 residents"
 
-[node name="RetailButton" type="Button" parent="UI/BuildPanel"]
+[node name="CoworkingButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
-text = "Retail ($25,000) - Orange"
+text = "Coworking ($8k) +10 workers"
+
+[node name="FoodCourtButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "Food Court ($12k) Lobby/F1"
 
 [node name="SpawnButton" type="Button" parent="UI/BuildPanel"]
 layout_mode = 2
 text = "Spawn Person"
+
+[node name="VIPButton" type="Button" parent="UI/BuildPanel"]
+layout_mode = 2
+text = "VIP Visit (Test)"
+
+[node name="RentPopup" type="Panel" parent="UI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -80.0
+offset_right = 150.0
+offset_bottom = 80.0
+
+[node name="RentLabel" type="Label" parent="UI/RentPopup"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+horizontal_alignment = 1
+vertical_alignment = 1
