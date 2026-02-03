@@ -13,21 +13,26 @@ const STAR_NAMES: Array = ["1 Star", "2 Stars", "3 Stars", "4 Stars", "5 Stars",
 
 # Unlock requirements (star level required for each feature)
 const UNLOCKS: Dictionary = {
-	"floor": 1,        # Available from start
-	"elevator": 1,     # Available from start
-	"office": 1,       # Available from start
-	"apartment": 1,    # Available from start
-	"coworking": 1,    # Available from start
-	"food_court": 1,   # Available from start
-	"restaurant": 2,   # Unlocks at 2 stars (1000 pop)
-	"hotel": 3,        # Unlocks at 3 stars (5000 pop)
-	"cinema": 4,       # Unlocks at 4 stars (25000 pop)
-	"parking": 4,      # Unlocks at 4 stars (25000 pop)
-	"cathedral": 5,    # Unlocks at 5 stars (50000 pop)
+	"floor": 1,            # Available from start
+	"elevator": 1,         # Available from start
+	"office": 1,           # Available from start
+	"apartment": 1,        # Available from start
+	"coworking": 1,        # Available from start
+	"food_court": 1,       # Available from start
+	"hotel": 2,            # Unlocks at 2 stars
+	"condo": 2,            # Unlocks at 2 stars
+	"security": 2,         # Unlocks at 2 stars
+	"housekeeping": 2,     # Unlocks at 2 stars
+	"daycare": 2,          # Unlocks at 2 stars
+	"service_elevator": 2, # Unlocks at 2 stars
+	"restaurant": 3,       # Unlocks at 3 stars
+	"cinema": 4,           # Unlocks at 4 stars
+	"parking": 4,          # Unlocks at 4 stars
+	"cathedral": 5,        # Unlocks at 5 stars
 }
 
 # Game state
-var money: int = 100000
+var money: int = 100000000  # $100 million for testing
 var population: int = 0
 var current_day: int = 1
 var current_hour: float = 6.0  # 6:00 AM start
@@ -45,10 +50,16 @@ const RENT_PER_OFFICE: int = 1000
 const RENT_PER_APARTMENT: int = 500
 const RENT_PER_COWORKING: int = 600
 const RENT_PER_FOOD_COURT: int = 1500
+const RENT_PER_HOTEL: int = 800
+const RENT_PER_DAYCARE: int = 400
 const RENT_COLLECTION_HOUR: int = 0  # Collect rent at midnight
 
 # Build mode
-enum BuildMode { NONE, FLOOR, ELEVATOR, OFFICE, APARTMENT, COWORKING, FOOD_COURT }
+enum BuildMode {
+	NONE, FLOOR, ELEVATOR, OFFICE, APARTMENT, COWORKING, FOOD_COURT,
+	HOTEL, CONDO, SECURITY, HOUSEKEEPING, DAYCARE, SERVICE_ELEVATOR,
+	DEMOLISH
+}
 var current_build_mode: BuildMode = BuildMode.NONE
 
 # References
@@ -65,6 +76,7 @@ signal satisfaction_changed(satisfaction: float)
 signal star_level_changed(new_level: int, star_name: String)
 signal unlock_available(feature_name: String)
 signal rent_collected(total: int, breakdown: Dictionary)
+signal vip_pending_changed(is_pending: bool)
 
 
 func _ready() -> void:
@@ -86,23 +98,30 @@ func _process(delta: float) -> void:
 
 
 func _connect_ui_signals() -> void:
-	var floor_btn = $UI/BuildPanel/FloorButton
-	var elevator_btn = $UI/BuildPanel/ElevatorButton
-	var office_btn = $UI/BuildPanel/OfficeButton
-	var apartment_btn = $UI/BuildPanel/ApartmentButton
-	var coworking_btn = $UI/BuildPanel/CoworkingButton
-	var food_court_btn = $UI/BuildPanel/FoodCourtButton
-	var spawn_btn = $UI/BuildPanel/SpawnButton
-	var vip_btn = $UI/BuildPanel/VIPButton
+	var bp = $UI/ScrollContainer/BuildPanel
 
-	floor_btn.pressed.connect(_on_floor_button_pressed)
-	elevator_btn.pressed.connect(_on_elevator_button_pressed)
-	office_btn.pressed.connect(_on_office_button_pressed)
-	apartment_btn.pressed.connect(_on_apartment_button_pressed)
-	coworking_btn.pressed.connect(_on_coworking_button_pressed)
-	food_court_btn.pressed.connect(_on_food_court_button_pressed)
-	spawn_btn.pressed.connect(_on_spawn_button_pressed)
-	vip_btn.pressed.connect(_on_vip_button_pressed)
+	# 1-star buildings
+	bp.get_node("FloorButton").pressed.connect(_on_floor_button_pressed)
+	bp.get_node("ElevatorButton").pressed.connect(_on_elevator_button_pressed)
+	bp.get_node("OfficeButton").pressed.connect(_on_office_button_pressed)
+	bp.get_node("ApartmentButton").pressed.connect(_on_apartment_button_pressed)
+	bp.get_node("CoworkingButton").pressed.connect(_on_coworking_button_pressed)
+	bp.get_node("FoodCourtButton").pressed.connect(_on_food_court_button_pressed)
+
+	# 2-star buildings
+	bp.get_node("HotelButton").pressed.connect(_on_hotel_button_pressed)
+	bp.get_node("CondoButton").pressed.connect(_on_condo_button_pressed)
+	bp.get_node("SecurityButton").pressed.connect(_on_security_button_pressed)
+	bp.get_node("HousekeepingButton").pressed.connect(_on_housekeeping_button_pressed)
+	bp.get_node("DaycareButton").pressed.connect(_on_daycare_button_pressed)
+	bp.get_node("ServiceElevatorButton").pressed.connect(_on_service_elevator_button_pressed)
+
+	# Utility buttons
+	bp.get_node("DemolishButton").pressed.connect(_on_demolish_button_pressed)
+	bp.get_node("SpawnButton").pressed.connect(_on_spawn_button_pressed)
+
+	# VIP button is in TopBar for visibility
+	$UI/TopBar/VIPButton.pressed.connect(_on_vip_button_pressed)
 
 
 func _update_game_time(delta: float) -> void:
@@ -152,25 +171,38 @@ func _check_star_upgrade() -> void:
 		# Ready for upgrade - in original SimTower, VIP visit triggers it
 		if not vip_visit_pending:
 			vip_visit_pending = true
+			vip_pending_changed.emit(true)
 			print("VIP visit pending! Population threshold reached for ", STAR_NAMES[current_star_level])
 
 
 func trigger_vip_visit() -> void:
 	# Called when VIP arrives and approves the tower
-	if vip_visit_pending:
-		vip_visit_pending = false
-		current_star_level += 1
-		vip_visits_completed += 1
+	if not vip_visit_pending:
+		print("No VIP visit pending")
+		return
 
-		var star_name = STAR_NAMES[current_star_level - 1]
-		star_level_changed.emit(current_star_level, star_name)
-		print("Congratulations! Tower upgraded to ", star_name)
+	# Check for hotel complaints - VIP might reject if too many
+	var complaints = building.get_hotel_complaints()
+	if complaints > 5:
+		print("VIP visit FAILED! Too many hotel complaints (", complaints, "). Fix housekeeping!")
+		building.reset_hotel_complaints()
+		return
 
-		# Check for new unlocks
-		for feature in UNLOCKS:
-			if UNLOCKS[feature] == current_star_level:
-				unlock_available.emit(feature)
-				print("New feature unlocked: ", feature)
+	vip_visit_pending = false
+	vip_pending_changed.emit(false)
+	current_star_level += 1
+	vip_visits_completed += 1
+	building.reset_hotel_complaints()
+
+	var star_name = STAR_NAMES[current_star_level - 1]
+	star_level_changed.emit(current_star_level, star_name)
+	print("Congratulations! Tower upgraded to ", star_name)
+
+	# Check for new unlocks
+	for feature in UNLOCKS:
+		if UNLOCKS[feature] == current_star_level:
+			unlock_available.emit(feature)
+			print("New feature unlocked: ", feature)
 
 
 func is_feature_unlocked(feature_name: String) -> bool:
@@ -254,15 +286,61 @@ func _on_food_court_button_pressed() -> void:
 		set_build_mode(BuildMode.FOOD_COURT)
 
 
+func _on_hotel_button_pressed() -> void:
+	if current_build_mode == BuildMode.HOTEL:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.HOTEL)
+
+
+func _on_condo_button_pressed() -> void:
+	if current_build_mode == BuildMode.CONDO:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.CONDO)
+
+
+func _on_security_button_pressed() -> void:
+	if current_build_mode == BuildMode.SECURITY:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.SECURITY)
+
+
+func _on_housekeeping_button_pressed() -> void:
+	if current_build_mode == BuildMode.HOUSEKEEPING:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.HOUSEKEEPING)
+
+
+func _on_daycare_button_pressed() -> void:
+	if current_build_mode == BuildMode.DAYCARE:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.DAYCARE)
+
+
+func _on_service_elevator_button_pressed() -> void:
+	if current_build_mode == BuildMode.SERVICE_ELEVATOR:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.SERVICE_ELEVATOR)
+
+
+func _on_demolish_button_pressed() -> void:
+	if current_build_mode == BuildMode.DEMOLISH:
+		set_build_mode(BuildMode.NONE)
+	else:
+		set_build_mode(BuildMode.DEMOLISH)
+
+
 func _on_spawn_button_pressed() -> void:
 	building.spawn_person()
 
 
 func _on_vip_button_pressed() -> void:
-	if vip_visit_pending:
-		trigger_vip_visit()
-	else:
-		print("No VIP visit pending - need to reach population threshold first")
+	trigger_vip_visit()
 
 
 func _on_satisfaction_changed(sat: float) -> void:
@@ -274,8 +352,12 @@ func _collect_rent() -> void:
 	var num_apartments = building.apartments.size()
 	var num_coworking = building.coworking.size()
 	var num_food_courts = building.food_courts.size()
+	var num_hotels = building.hotels.size()
+	var num_daycares = building.daycares.size()
 
-	if num_offices == 0 and num_apartments == 0 and num_coworking == 0 and num_food_courts == 0:
+	var has_tenants = num_offices > 0 or num_apartments > 0 or num_coworking > 0 or \
+					  num_food_courts > 0 or num_hotels > 0 or num_daycares > 0
+	if not has_tenants:
 		return
 
 	var satisfaction = building.get_satisfaction()
@@ -286,7 +368,9 @@ func _collect_rent() -> void:
 	var apartment_rent = int(num_apartments * RENT_PER_APARTMENT * rent_multiplier)
 	var coworking_rent = int(num_coworking * RENT_PER_COWORKING * rent_multiplier)
 	var food_court_rent = int(num_food_courts * RENT_PER_FOOD_COURT * rent_multiplier)
-	var total_rent = office_rent + apartment_rent + coworking_rent + food_court_rent
+	var hotel_rent = int(num_hotels * RENT_PER_HOTEL * rent_multiplier)
+	var daycare_rent = int(num_daycares * RENT_PER_DAYCARE * rent_multiplier)
+	var total_rent = office_rent + apartment_rent + coworking_rent + food_court_rent + hotel_rent + daycare_rent
 
 	earn_money(total_rent)
 
@@ -295,6 +379,8 @@ func _collect_rent() -> void:
 		"offices": office_rent,
 		"apartments": apartment_rent,
 		"coworking": coworking_rent,
-		"food_courts": food_court_rent
+		"food_courts": food_court_rent,
+		"hotels": hotel_rent,
+		"daycares": daycare_rent
 	})
 	print("Daily rent collected: $", total_rent)

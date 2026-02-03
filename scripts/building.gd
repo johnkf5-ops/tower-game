@@ -22,25 +22,53 @@ const COLOR_OFFICE = Color(0.3, 0.5, 0.8)  # Blue
 const COLOR_APARTMENT = Color(0.3, 0.7, 0.4)  # Green
 const COLOR_COWORKING = Color(0.2, 0.7, 0.7)  # Teal
 const COLOR_FOOD_COURT = Color(0.9, 0.6, 0.2)  # Orange
+const COLOR_HOTEL = Color(0.6, 0.3, 0.7)  # Purple
+const COLOR_CONDO = Color(0.2, 0.5, 0.3)  # Dark green
+const COLOR_SECURITY = Color(0.5, 0.5, 0.5)  # Gray
+const COLOR_HOUSEKEEPING = Color(0.95, 0.95, 0.95)  # White
+const COLOR_DAYCARE = Color(0.95, 0.9, 0.3)  # Yellow
+const COLOR_SERVICE_ELEVATOR = Color(0.5, 0.35, 0.2)  # Brown
 
 # Population per tenant type
 const POP_PER_OFFICE = 6
 const POP_PER_APARTMENT = 4
 const POP_PER_COWORKING = 10
+const POP_PER_HOTEL = 2  # Guests per room
+const POP_PER_CONDO = 2
+const POP_PER_DAYCARE = 8  # Children capacity
+
+# Service ratios
+const HOUSEKEEPING_ROOMS_CAPACITY = 20  # One housekeeping covers 20 hotel rooms
+const SECURITY_FLOOR_RANGE = 5  # Security reduces stress within 5 floors
 
 # Tenant types
-enum TenantType { OFFICE, APARTMENT, COWORKING, FOOD_COURT }
+enum TenantType { OFFICE, APARTMENT, COWORKING, FOOD_COURT, HOTEL_GUEST, CONDO, DAYCARE_CHILD, HOUSEKEEPING_STAFF }
 
 # Data structures
 var floors: Dictionary = {}  # floor_number -> FloorData
 var elevators: Array = []
 var elevator_shafts: Dictionary = {}  # x_position -> ElevatorShaft
+var service_elevator_shafts: Dictionary = {}  # x_position -> ElevatorShaft (for service elevators)
+
+# 1-star tenants
 var offices: Array = []  # Array of {floor: int, x: int}
 var apartments: Array = []
 var coworking: Array = []
 var food_courts: Array = []
+
+# 2-star tenants
+var hotels: Array = []  # {floor, x, needs_service: bool, last_serviced_day: int}
+var condos: Array = []  # {floor, x, occupied: bool}
+var security_offices: Array = []  # {floor, x}
+var housekeeping: Array = []  # {floor, x}
+var daycares: Array = []  # {floor, x}
+
 var people: Array = []  # Active person nodes
 var waiting_queues: Dictionary = {}  # shaft_x -> {floor_num -> [person, ...]}
+var service_waiting_queues: Dictionary = {}  # For service elevators
+
+# Hotel tracking
+var hotel_complaints: int = 0  # Affects VIP visits
 
 # Schedule tracking
 var last_spawn_minute: int = -1
@@ -320,6 +348,20 @@ func _handle_click(world_pos: Vector2) -> void:
 			_try_build_coworking(grid_x, floor_num)
 		main.BuildMode.FOOD_COURT:
 			_try_build_food_court(grid_x, floor_num)
+		main.BuildMode.HOTEL:
+			_try_build_hotel(grid_x, floor_num)
+		main.BuildMode.CONDO:
+			_try_build_condo(grid_x, floor_num)
+		main.BuildMode.SECURITY:
+			_try_build_security(grid_x, floor_num)
+		main.BuildMode.HOUSEKEEPING:
+			_try_build_housekeeping(grid_x, floor_num)
+		main.BuildMode.DAYCARE:
+			_try_build_daycare(grid_x, floor_num)
+		main.BuildMode.SERVICE_ELEVATOR:
+			_try_build_service_elevator(grid_x, floor_num)
+		main.BuildMode.DEMOLISH:
+			_try_demolish(grid_x, floor_num)
 
 
 func _try_build_floor(floor_num: int) -> void:
@@ -352,14 +394,16 @@ func _try_build_elevator(grid_x: int, floor_num: int) -> void:
 		print("Elevator out of bounds")
 		return
 
-	# Check if shaft exists at this x
-	if elevator_shafts.has(grid_x):
-		var shaft = elevator_shafts[grid_x]
-		# If clicking within shaft range, add another car
+	# Check if clicking within an existing shaft (shafts are 2 tiles wide)
+	var existing_shaft_x = _find_shaft_at_position(grid_x)
+
+	if existing_shaft_x != -1:
+		var shaft = elevator_shafts[existing_shaft_x]
+		# If clicking within shaft's floor range, add another car
 		if floor_num >= shaft.min_floor and floor_num <= shaft.max_floor:
 			if main.spend_money(10000):
-				_create_elevator_car(grid_x, floor_num)
-				_update_elevator_visual(grid_x)
+				_create_elevator_car(existing_shaft_x, floor_num)
+				_update_elevator_visual(existing_shaft_x)
 				print("Added car to shaft (", shaft.cars.size(), " cars)")
 		else:
 			# Extend shaft range
@@ -367,9 +411,16 @@ func _try_build_elevator(grid_x: int, floor_num: int) -> void:
 				shaft.min_floor = floor_num
 			elif floor_num > shaft.max_floor:
 				shaft.max_floor = floor_num
-			_update_elevator_visual(grid_x)
+			_update_elevator_visual(existing_shaft_x)
 			print("Extended shaft to floor ", floor_num)
 	else:
+		# Check tiles are empty before creating new shaft
+		var floor_data = floors[floor_num]
+		for i in range(2):
+			if floor_data.tiles[grid_x + i] != "empty":
+				print("Space occupied")
+				return
+
 		# Create new shaft
 		if main.spend_money(20000):
 			var shaft = ElevatorShaft.new()
@@ -379,7 +430,18 @@ func _try_build_elevator(grid_x: int, floor_num: int) -> void:
 			elevator_shafts[grid_x] = shaft
 			_create_elevator_car(grid_x, floor_num)
 			_update_elevator_visual(grid_x)
+			# Mark tiles as occupied
+			for i in range(2):
+				floor_data.tiles[grid_x + i] = "elevator"
 			print("Built elevator at x:", grid_x)
+
+
+func _find_shaft_at_position(grid_x: int) -> int:
+	# Check if grid_x falls within any existing shaft (2 tiles wide)
+	for shaft_x in elevator_shafts:
+		if grid_x >= shaft_x and grid_x < shaft_x + 2:
+			return shaft_x
+	return -1
 
 
 func _try_build_office(grid_x: int, floor_num: int) -> void:
@@ -502,6 +564,471 @@ func _try_build_food_court(grid_x: int, floor_num: int) -> void:
 		food_courts.append({"floor": floor_num, "x": grid_x})
 		_create_tenant_visual(grid_x, floor_num, COLOR_FOOD_COURT, "Food")
 		print("Built food court at floor ", floor_num)
+
+
+# ============ 2-STAR BUILDINGS ============
+
+func _try_build_hotel(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("hotel"):
+		print("Hotel rooms not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	if floors[floor_num].is_lobby:
+		print("Can't build hotel in lobby")
+		return
+
+	if grid_x < 0 or grid_x + 4 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(4):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(20000):
+		for i in range(4):
+			floor_data.tiles[grid_x + i] = "hotel"
+		hotels.append({
+			"floor": floor_num,
+			"x": grid_x,
+			"needs_service": false,
+			"last_serviced_day": main.current_day,
+			"occupied": false
+		})
+		_create_tenant_visual(grid_x, floor_num, COLOR_HOTEL, "Hotel")
+		print("Built hotel room at floor ", floor_num)
+
+
+func _try_build_condo(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("condo"):
+		print("Condos not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	if floors[floor_num].is_lobby:
+		print("Can't build condo in lobby")
+		return
+
+	if grid_x < 0 or grid_x + 4 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(4):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(150000):
+		for i in range(4):
+			floor_data.tiles[grid_x + i] = "condo"
+		condos.append({"floor": floor_num, "x": grid_x, "occupied": true})
+		_create_tenant_visual(grid_x, floor_num, COLOR_CONDO, "Condo")
+		main.change_population(POP_PER_CONDO)
+		# Condos are one-time purchase - money already spent, resident moves in
+		print("Built condo at floor ", floor_num, " (+", POP_PER_CONDO, " residents)")
+
+
+func _try_build_security(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("security"):
+		print("Security office not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	# Security is 2 tiles wide
+	if grid_x < 0 or grid_x + 2 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(2):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(5000):
+		for i in range(2):
+			floor_data.tiles[grid_x + i] = "security"
+		security_offices.append({"floor": floor_num, "x": grid_x})
+		_create_tenant_visual_small(grid_x, floor_num, COLOR_SECURITY, "Sec")
+		print("Built security office at floor ", floor_num, " (reduces stress within ", SECURITY_FLOOR_RANGE, " floors)")
+
+
+func _try_build_housekeeping(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("housekeeping"):
+		print("Housekeeping not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	# Housekeeping is 2 tiles wide
+	if grid_x < 0 or grid_x + 2 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(2):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(3000):
+		for i in range(2):
+			floor_data.tiles[grid_x + i] = "housekeeping"
+		housekeeping.append({"floor": floor_num, "x": grid_x})
+		_create_tenant_visual_small(grid_x, floor_num, COLOR_HOUSEKEEPING, "HK")
+		print("Built housekeeping at floor ", floor_num, " (services up to ", HOUSEKEEPING_ROOMS_CAPACITY, " hotel rooms)")
+
+
+func _try_build_daycare(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("daycare"):
+		print("Daycare not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	if grid_x < 0 or grid_x + 4 > FLOOR_WIDTH:
+		print("Out of bounds")
+		return
+
+	var floor_data = floors[floor_num]
+	for i in range(4):
+		if floor_data.tiles[grid_x + i] != "empty":
+			print("Space occupied")
+			return
+
+	if main.spend_money(10000):
+		for i in range(4):
+			floor_data.tiles[grid_x + i] = "daycare"
+		daycares.append({"floor": floor_num, "x": grid_x, "children": 0})
+		_create_tenant_visual(grid_x, floor_num, COLOR_DAYCARE, "Daycare")
+		print("Built daycare at floor ", floor_num, " (capacity: ", POP_PER_DAYCARE, " children)")
+
+
+func _try_build_service_elevator(grid_x: int, floor_num: int) -> void:
+	if not main.is_feature_unlocked("service_elevator"):
+		print("Service elevator not unlocked yet (need 2 stars)")
+		return
+
+	if not floors.has(floor_num):
+		print("Need a floor first")
+		return
+
+	if grid_x < 0 or grid_x + 2 > FLOOR_WIDTH:
+		print("Service elevator out of bounds")
+		return
+
+	# Check if clicking within an existing service shaft (2 tiles wide)
+	var existing_shaft_x = _find_service_shaft_at_position(grid_x)
+
+	if existing_shaft_x != -1:
+		var shaft = service_elevator_shafts[existing_shaft_x]
+		if floor_num >= shaft.min_floor and floor_num <= shaft.max_floor:
+			if main.spend_money(8000):
+				_create_service_elevator_car(existing_shaft_x, floor_num)
+				_update_service_elevator_visual(existing_shaft_x)
+				print("Added service car to shaft (", shaft.cars.size(), " cars)")
+		else:
+			shaft.min_floor = min(shaft.min_floor, floor_num)
+			shaft.max_floor = max(shaft.max_floor, floor_num)
+			_update_service_elevator_visual(existing_shaft_x)
+			print("Extended service shaft to floor ", floor_num)
+	else:
+		# Check tiles are empty before creating new shaft
+		var floor_data = floors[floor_num]
+		for i in range(2):
+			if floor_data.tiles[grid_x + i] != "empty":
+				print("Space occupied")
+				return
+
+		if main.spend_money(15000):
+			var shaft = ElevatorShaft.new()
+			shaft.x_position = grid_x
+			shaft.min_floor = floor_num
+			shaft.max_floor = floor_num
+			service_elevator_shafts[grid_x] = shaft
+			_create_service_elevator_car(grid_x, floor_num)
+			_update_service_elevator_visual(grid_x)
+			# Mark tiles as occupied
+			for i in range(2):
+				floor_data.tiles[grid_x + i] = "service_elevator"
+			print("Built service elevator at x:", grid_x)
+
+
+func _find_service_shaft_at_position(grid_x: int) -> int:
+	# Check if grid_x falls within any existing service shaft (2 tiles wide)
+	for shaft_x in service_elevator_shafts:
+		if grid_x >= shaft_x and grid_x < shaft_x + 2:
+			return shaft_x
+	return -1
+
+
+# ============ DEMOLISH SYSTEM ============
+
+func _try_demolish(grid_x: int, floor_num: int) -> void:
+	if not floors.has(floor_num):
+		return
+
+	var floor_data = floors[floor_num]
+	var tile_type = floor_data.tiles[grid_x]
+
+	if tile_type == "empty":
+		# Check if clicking on elevator shaft
+		var shaft_x = _find_shaft_at_position(grid_x)
+		if shaft_x != -1:
+			_demolish_elevator(shaft_x)
+			return
+
+		var service_shaft_x = _find_service_shaft_at_position(grid_x)
+		if service_shaft_x != -1:
+			_demolish_service_elevator(service_shaft_x)
+			return
+
+		print("Nothing to demolish here")
+		return
+
+	# Find and demolish the tenant at this position
+	match tile_type:
+		"office":
+			_demolish_tenant(grid_x, floor_num, offices, "office", 4, POP_PER_OFFICE, 5000)
+		"apartment":
+			_demolish_tenant(grid_x, floor_num, apartments, "apartment", 4, POP_PER_APARTMENT, 7500)
+		"coworking":
+			_demolish_tenant(grid_x, floor_num, coworking, "coworking", 4, POP_PER_COWORKING, 4000)
+		"food_court":
+			_demolish_tenant(grid_x, floor_num, food_courts, "food_court", 4, 0, 6000)
+		"hotel":
+			_demolish_tenant(grid_x, floor_num, hotels, "hotel", 4, 0, 10000)
+		"condo":
+			_demolish_tenant(grid_x, floor_num, condos, "condo", 4, POP_PER_CONDO, 75000)
+		"security":
+			_demolish_tenant(grid_x, floor_num, security_offices, "security", 2, 0, 2500)
+		"housekeeping":
+			_demolish_tenant(grid_x, floor_num, housekeeping, "housekeeping", 2, 0, 1500)
+		"daycare":
+			_demolish_tenant(grid_x, floor_num, daycares, "daycare", 4, 0, 5000)
+		"elevator":
+			var shaft_x = _find_shaft_at_position(grid_x)
+			if shaft_x != -1:
+				_demolish_elevator(shaft_x)
+		"service_elevator":
+			var shaft_x = _find_service_shaft_at_position(grid_x)
+			if shaft_x != -1:
+				_demolish_service_elevator(shaft_x)
+
+
+func _demolish_tenant(grid_x: int, floor_num: int, tenant_array: Array, tile_type: String, width: int, pop: int, refund: int) -> void:
+	# Find the tenant that contains this tile
+	var tenant_to_remove = null
+	for tenant in tenant_array:
+		if tenant["floor"] == floor_num:
+			if grid_x >= tenant["x"] and grid_x < tenant["x"] + width:
+				tenant_to_remove = tenant
+				break
+
+	if tenant_to_remove == null:
+		print("Could not find tenant to demolish")
+		return
+
+	var tenant_x = tenant_to_remove["x"]
+
+	# Clear tiles
+	var floor_data = floors[floor_num]
+	for i in range(width):
+		floor_data.tiles[tenant_x + i] = "empty"
+
+	# Remove from array
+	tenant_array.erase(tenant_to_remove)
+
+	# Refund money (50% of build cost)
+	main.earn_money(refund)
+
+	# Remove population
+	if pop > 0:
+		main.change_population(-pop)
+
+	# Remove visual
+	_remove_tenant_visual(tenant_x, floor_num)
+
+	print("Demolished ", tile_type, " at floor ", floor_num, " (refund: $", refund, ")")
+
+
+func _demolish_elevator(shaft_x: int) -> void:
+	if not elevator_shafts.has(shaft_x):
+		return
+
+	var shaft = elevator_shafts[shaft_x]
+
+	# Remove all cars
+	for car in shaft.cars:
+		car.queue_free()
+
+	# Clear tiles on all floors
+	for floor_num in range(shaft.min_floor, shaft.max_floor + 1):
+		if floors.has(floor_num):
+			var floor_data = floors[floor_num]
+			for i in range(2):
+				if shaft_x + i < FLOOR_WIDTH:
+					floor_data.tiles[shaft_x + i] = "empty"
+
+	# Remove shaft visual
+	var shaft_visual = elevators_node.get_node_or_null("Shaft_" + str(shaft_x))
+	if shaft_visual:
+		shaft_visual.queue_free()
+
+	elevator_shafts.erase(shaft_x)
+	main.earn_money(10000)  # Partial refund
+	print("Demolished elevator shaft at x:", shaft_x)
+
+
+func _demolish_service_elevator(shaft_x: int) -> void:
+	if not service_elevator_shafts.has(shaft_x):
+		return
+
+	var shaft = service_elevator_shafts[shaft_x]
+
+	# Remove all cars
+	for car in shaft.cars:
+		car.queue_free()
+
+	# Clear tiles on all floors
+	for floor_num in range(shaft.min_floor, shaft.max_floor + 1):
+		if floors.has(floor_num):
+			var floor_data = floors[floor_num]
+			for i in range(2):
+				if shaft_x + i < FLOOR_WIDTH:
+					floor_data.tiles[shaft_x + i] = "empty"
+
+	# Remove shaft visual
+	var shaft_visual = elevators_node.get_node_or_null("ServiceShaft_" + str(shaft_x))
+	if shaft_visual:
+		shaft_visual.queue_free()
+
+	service_elevator_shafts.erase(shaft_x)
+	main.earn_money(7500)  # Partial refund
+	print("Demolished service elevator shaft at x:", shaft_x)
+
+
+func _remove_tenant_visual(grid_x: int, floor_num: int) -> void:
+	var floor_node = floors_node.get_node_or_null("Floor_" + str(floor_num))
+	if not floor_node:
+		return
+
+	# Find and remove ColorRect and Label at this position
+	var nodes_to_remove = []
+	for child in floor_node.get_children():
+		if child is ColorRect:
+			var pos_x = child.position.x
+			if pos_x >= grid_x * TILE_WIDTH and pos_x < (grid_x + 4) * TILE_WIDTH:
+				nodes_to_remove.append(child)
+		elif child is Label:
+			var pos_x = child.position.x
+			if pos_x >= grid_x * TILE_WIDTH and pos_x < (grid_x + 4) * TILE_WIDTH:
+				# Don't remove floor number label
+				if child.text != str(floor_num) and child.text != "L":
+					nodes_to_remove.append(child)
+
+	for node in nodes_to_remove:
+		node.queue_free()
+
+
+func _create_tenant_visual_small(grid_x: int, floor_num: int, color: Color, label_text: String = "") -> void:
+	var floor_node = floors_node.get_node("Floor_" + str(floor_num))
+	if not floor_node:
+		return
+
+	var tenant = ColorRect.new()
+	tenant.size = Vector2(TILE_WIDTH * 2 - 4, FLOOR_HEIGHT - 8)
+	tenant.position = Vector2(grid_x * TILE_WIDTH + 2, 4)
+	tenant.color = color
+	floor_node.add_child(tenant)
+
+	if label_text != "":
+		var label = Label.new()
+		label.text = label_text
+		label.position = Vector2(grid_x * TILE_WIDTH + 8, 18)
+		label.add_theme_color_override("font_color", Color.BLACK)
+		label.add_theme_font_size_override("font_size", 10)
+		floor_node.add_child(label)
+
+
+func _create_service_elevator_car(shaft_x: int, floor_num: int) -> void:
+	var shaft = service_elevator_shafts[shaft_x]
+	var car_index = shaft.cars.size()
+
+	var car = Node2D.new()
+	car.name = "ServiceCar_" + str(shaft_x) + "_" + str(car_index)
+	car.set_meta("shaft_x", shaft_x)
+	car.set_meta("car_index", car_index)
+	car.set_meta("current_floor", floor_num)
+	car.set_meta("target_floor", floor_num)
+	car.set_meta("passengers", [])
+	car.set_meta("floor_stops", [])
+	car.set_meta("state", "idle")
+	car.set_meta("is_service", true)
+
+	car.position = Vector2(shaft_x * TILE_WIDTH, -floor_num * FLOOR_HEIGHT)
+
+	var rect = ColorRect.new()
+	rect.size = Vector2(TILE_WIDTH * 2, FLOOR_HEIGHT - 4)
+	rect.position = Vector2(0, 2)
+	rect.color = COLOR_SERVICE_ELEVATOR
+	car.add_child(rect)
+
+	var label = Label.new()
+	label.text = "S" + str(car_index + 1)
+	label.position = Vector2(TILE_WIDTH - 10, 15)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	car.add_child(label)
+
+	shaft.cars.append(car)
+	elevators_node.add_child(car)
+
+
+func _update_service_elevator_visual(shaft_x: int) -> void:
+	var shaft = service_elevator_shafts[shaft_x]
+
+	var shaft_visual_name = "ServiceShaft_" + str(shaft_x)
+	var shaft_visual = elevators_node.get_node_or_null(shaft_visual_name)
+
+	if shaft_visual:
+		shaft_visual.queue_free()
+
+	shaft_visual = Node2D.new()
+	shaft_visual.name = shaft_visual_name
+
+	for floor_num in range(shaft.min_floor, shaft.max_floor + 1):
+		var rect = ColorRect.new()
+		rect.size = Vector2(TILE_WIDTH * 2, FLOOR_HEIGHT)
+		rect.position = Vector2(shaft_x * TILE_WIDTH, -floor_num * FLOOR_HEIGHT)
+		rect.color = Color(0.35, 0.25, 0.15, 0.5)  # Brown tint
+		shaft_visual.add_child(rect)
+
+	var count_label = Label.new()
+	count_label.text = str(shaft.cars.size()) + " svc"
+	count_label.position = Vector2(shaft_x * TILE_WIDTH, -shaft.max_floor * FLOOR_HEIGHT - 20)
+	count_label.add_theme_color_override("font_color", Color(0.8, 0.6, 0.4))
+	count_label.add_theme_font_size_override("font_size", 12)
+	shaft_visual.add_child(count_label)
+
+	elevators_node.add_child(shaft_visual)
+	elevators_node.move_child(shaft_visual, 0)
 
 
 func _try_call_elevator(grid_x: int, floor_num: int) -> void:
@@ -701,6 +1228,33 @@ func _update_schedules() -> void:
 	if hour_int >= 11 and hour_int < 14:
 		_spawn_food_court_customers()
 
+	# ===== HOTEL: Check-in 3-6pm, Check-out 9-11am =====
+	if hour_int >= 15 and hour_int < 18:
+		_spawn_hotel_guests()
+
+	if hour_int >= 9 and hour_int < 11:
+		_trigger_hotel_checkout()
+
+	# ===== HOUSEKEEPING: Service rooms during day =====
+	if hour_int >= 10 and hour_int < 16:
+		_run_housekeeping()
+
+	# ===== CONDOS: Behave like apartments =====
+	if hour_int >= 7 and hour_int < 9:
+		_trigger_tenant_departure(TenantType.CONDO)
+
+	if hour_int >= 18 and hour_int < 21:
+		for condo in condos:
+			if condo["occupied"] and randf() < 0.1:
+				_spawn_condo_resident(condo)
+
+	# ===== DAYCARE: Drop-off 8am, Pick-up 5pm =====
+	if hour_int >= 8 and hour_int < 9:
+		_spawn_daycare_dropoff()
+
+	if hour_int >= 17 and hour_int < 18:
+		_spawn_daycare_pickup()
+
 
 func _spawn_office_worker(office: Dictionary) -> void:
 	if elevator_shafts.is_empty():
@@ -835,8 +1389,174 @@ func _trigger_tenant_departure(tenant_type: TenantType) -> void:
 				var chance = 0.1 if tenant_type == TenantType.OFFICE else 0.08
 				if tenant_type == TenantType.COWORKING:
 					chance = 0.05  # Coworking has random departures
+				if tenant_type == TenantType.CONDO:
+					chance = 0.08  # Condos behave like apartments
 				if randf() < chance:
 					_send_person_to_lobby(person)
+
+
+# ============ 2-STAR TENANT SPAWNS ============
+
+func _spawn_hotel_guests() -> void:
+	if hotels.is_empty():
+		return
+
+	for hotel in hotels:
+		if hotel["occupied"]:
+			continue  # Already has guests
+
+		if randf() > 0.1:  # 10% chance per minute per empty room
+			continue
+
+		var dest_floor = hotel["floor"]
+		var dest_x = hotel["x"]
+
+		var shaft_x = _find_usable_shaft(0, dest_floor)
+		if shaft_x == -1:
+			continue
+
+		var person = _create_person(COLOR_HOTEL, TenantType.HOTEL_GUEST)
+		person.set_meta("hotel_room", hotel)
+		person.set_meta("dest_floor", dest_floor)
+		person.set_meta("dest_x", dest_x)
+		person.set_meta("shaft_x", shaft_x)
+
+		person.position = Vector2(20.0, FLOOR_HEIGHT - PERSON_SIZE)
+		person.set_meta("current_floor", 0)
+		person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
+
+		hotel["occupied"] = true
+		hotel["needs_service"] = true  # Room will need cleaning after checkout
+		main.change_population(POP_PER_HOTEL)
+
+
+func _trigger_hotel_checkout() -> void:
+	for person in people:
+		if person.get_meta("state") == PersonState.AT_DEST:
+			if person.get_meta("tenant_type") == TenantType.HOTEL_GUEST:
+				if randf() < 0.08:  # 8% chance per minute
+					var hotel = person.get_meta("hotel_room")
+					if hotel:
+						hotel["occupied"] = false
+						main.change_population(-POP_PER_HOTEL)
+					_send_person_to_lobby(person)
+
+
+func _run_housekeeping() -> void:
+	if housekeeping.is_empty():
+		return
+
+	# Calculate housekeeping capacity
+	var total_capacity = housekeeping.size() * HOUSEKEEPING_ROOMS_CAPACITY
+	var rooms_serviced = 0
+
+	for hotel in hotels:
+		if hotel["needs_service"] and not hotel["occupied"]:
+			if rooms_serviced < total_capacity:
+				hotel["needs_service"] = false
+				hotel["last_serviced_day"] = main.current_day
+				rooms_serviced += 1
+
+	# Hotels not serviced cause complaints
+	for hotel in hotels:
+		if hotel["needs_service"] and hotel["occupied"]:
+			# Check if room hasn't been serviced in too long
+			if main.current_day - hotel["last_serviced_day"] > 1:
+				# Guest is unhappy - stress them
+				for person in people:
+					if person.get_meta("tenant_type") == TenantType.HOTEL_GUEST:
+						var p_hotel = person.get_meta("hotel_room")
+						if p_hotel == hotel:
+							var stress = person.get_meta("stress")
+							person.set_meta("stress", stress + 10)  # Extra stress for dirty room
+							if randf() < 0.01:  # 1% chance per minute to complain
+								hotel_complaints += 1
+								print("Hotel guest complained! (", hotel_complaints, " total complaints)")
+
+
+func _spawn_condo_resident(condo: Dictionary) -> void:
+	if elevator_shafts.is_empty():
+		return
+
+	var condo_floor = condo["floor"]
+	var condo_x = condo["x"]
+
+	var shaft_x = _find_usable_shaft(0, condo_floor)
+	if shaft_x == -1:
+		return
+
+	var person = _create_person(COLOR_CONDO, TenantType.CONDO)
+	person.set_meta("home_floor", condo_floor)
+	person.set_meta("home_x", condo_x)
+	person.set_meta("dest_floor", condo_floor)
+	person.set_meta("dest_x", condo_x)
+	person.set_meta("shaft_x", shaft_x)
+
+	person.position = Vector2(20.0, FLOOR_HEIGHT - PERSON_SIZE)
+	person.set_meta("current_floor", 0)
+	person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
+
+
+func _spawn_daycare_dropoff() -> void:
+	if daycares.is_empty():
+		return
+
+	# Parents from apartments and condos drop off kids
+	var parent_homes = []
+	parent_homes.append_array(apartments)
+	parent_homes.append_array(condos)
+
+	if parent_homes.is_empty():
+		return
+
+	for daycare in daycares:
+		if daycare["children"] >= POP_PER_DAYCARE:
+			continue  # Full
+
+		if randf() > 0.15:  # 15% chance per minute
+			continue
+
+		# Pick a random parent home
+		var home = parent_homes[randi() % parent_homes.size()]
+		var dc_floor = daycare["floor"]
+		var dc_x = daycare["x"]
+		var home_floor = home["floor"]
+
+		var shaft_x = _find_usable_shaft(home_floor, dc_floor)
+		if shaft_x == -1:
+			continue
+
+		# Spawn child going to daycare
+		var child = _create_person(COLOR_DAYCARE, TenantType.DAYCARE_CHILD)
+		child.set_meta("home_floor", home_floor)
+		child.set_meta("daycare", daycare)
+		child.set_meta("dest_floor", dc_floor)
+		child.set_meta("dest_x", dc_x)
+		child.set_meta("shaft_x", shaft_x)
+
+		child.position = Vector2(home["x"] * TILE_WIDTH + TILE_WIDTH * 2, -home_floor * FLOOR_HEIGHT + FLOOR_HEIGHT - PERSON_SIZE)
+		child.set_meta("current_floor", home_floor)
+		child.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
+
+		daycare["children"] += 1
+
+
+func _spawn_daycare_pickup() -> void:
+	# Kids leave daycare and go home
+	for person in people:
+		if person.get_meta("tenant_type") == TenantType.DAYCARE_CHILD:
+			if person.get_meta("state") == PersonState.AT_DEST:
+				if randf() < 0.15:  # 15% chance per minute
+					var daycare = person.get_meta("daycare")
+					if daycare:
+						daycare["children"] = max(0, daycare["children"] - 1)
+
+					var home_floor = person.get_meta("home_floor")
+					var shaft_x = _find_usable_shaft(person.get_meta("current_floor"), home_floor)
+					if shaft_x != -1:
+						person.set_meta("dest_floor", home_floor)
+						person.set_meta("shaft_x", shaft_x)
+						person.set_meta("state", PersonState.WALKING_TO_ELEVATOR)
 
 
 func _send_person_to_lobby(person: Node2D) -> void:
@@ -1035,9 +1755,21 @@ func _person_wait_for_elevator(person: Node2D, delta: float) -> void:
 	var shaft_x: int = person.get_meta("shaft_x")
 	var current_floor: int = person.get_meta("current_floor")
 
+	# Calculate stress rate modifiers
+	var stress_modifier = 1.0
+
+	# Security office reduces stress
+	if _is_near_security(current_floor):
+		stress_modifier *= 0.5  # 50% stress reduction
+
+	# Daycare reduces stress for apartment/condo parents
+	var tenant_type = person.get_meta("tenant_type")
+	if tenant_type in [TenantType.APARTMENT, TenantType.CONDO] and not daycares.is_empty():
+		stress_modifier *= 0.8  # 20% stress reduction for parents
+
 	# Increase stress while waiting
 	var stress: float = person.get_meta("stress")
-	stress += STRESS_RATE * delta
+	stress += STRESS_RATE * delta * stress_modifier
 	person.set_meta("stress", stress)
 
 	# Update color based on stress level (green -> yellow -> orange -> red)
@@ -1051,6 +1783,13 @@ func _person_wait_for_elevator(person: Node2D, delta: float) -> void:
 
 	# Keep queue position updated
 	_update_queue_positions(shaft_x, current_floor)
+
+
+func _is_near_security(floor_num: int) -> bool:
+	for sec in security_offices:
+		if abs(sec["floor"] - floor_num) <= SECURITY_FLOOR_RANGE:
+			return true
+	return false
 
 
 func _get_stress_color(stress: float) -> Color:
@@ -1173,3 +1912,19 @@ func get_satisfaction() -> float:
 	if completed_trips == 0:
 		return 1.0  # Default to 100% if no trips yet
 	return total_satisfaction / completed_trips
+
+
+func get_hotel_complaints() -> int:
+	return hotel_complaints
+
+
+func reset_hotel_complaints() -> void:
+	hotel_complaints = 0
+
+
+func get_housekeeping_coverage() -> float:
+	if hotels.is_empty():
+		return 1.0
+	var capacity = housekeeping.size() * HOUSEKEEPING_ROOMS_CAPACITY
+	var needed = hotels.size()
+	return min(1.0, float(capacity) / float(needed))

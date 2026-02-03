@@ -34,7 +34,7 @@ offset_bottom = 40.0
 
 [node name="MoneyLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
-text = "$100,000"
+text = "$100,000,000"
 
 [node name="PopulationLabel" type="Label" parent="UI/TopBar"]
 layout_mode = 2
@@ -52,52 +52,93 @@ text = "Satisfaction: 100%"
 layout_mode = 2
 text = "[*....] -> 1,000 (0%)"
 
-[node name="BuildPanel" type="VBoxContainer" parent="UI"]
+[node name="VIPButton" type="Button" parent="UI/TopBar"]
+layout_mode = 2
+text = "VIP Visit"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="UI"]
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 10.0
-offset_top = -320.0
-offset_right = 220.0
+offset_top = -700.0
+offset_right = 240.0
 offset_bottom = -10.0
 
-[node name="BuildLabel" type="Label" parent="UI/BuildPanel"]
+[node name="BuildPanel" type="VBoxContainer" parent="UI/ScrollContainer"]
 layout_mode = 2
-text = "BUILD"
+size_flags_horizontal = 3
 
-[node name="FloorButton" type="Button" parent="UI/BuildPanel"]
+[node name="BuildLabel" type="Label" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "=== 1-STAR ==="
+
+[node name="FloorButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Floor ($5,000)"
 
-[node name="ElevatorButton" type="Button" parent="UI/BuildPanel"]
+[node name="ElevatorButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Elevator ($20,000)"
 
-[node name="OfficeButton" type="Button" parent="UI/BuildPanel"]
+[node name="OfficeButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Office ($10k) +6 workers"
 
-[node name="ApartmentButton" type="Button" parent="UI/BuildPanel"]
+[node name="ApartmentButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Apartment ($15k) +4 residents"
 
-[node name="CoworkingButton" type="Button" parent="UI/BuildPanel"]
+[node name="CoworkingButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Coworking ($8k) +10 workers"
 
-[node name="FoodCourtButton" type="Button" parent="UI/BuildPanel"]
+[node name="FoodCourtButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Food Court ($12k) Lobby/F1"
 
-[node name="SpawnButton" type="Button" parent="UI/BuildPanel"]
+[node name="Star2Label" type="Label" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "=== 2-STAR ==="
+
+[node name="HotelButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Hotel (Locked: 2 stars)"
+
+[node name="CondoButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Condo (Locked: 2 stars)"
+
+[node name="SecurityButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Security (Locked: 2 stars)"
+
+[node name="HousekeepingButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Housekeeping (Locked: 2 stars)"
+
+[node name="DaycareButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Daycare (Locked: 2 stars)"
+
+[node name="ServiceElevatorButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "Service Elev (Locked: 2 stars)"
+
+[node name="UtilLabel" type="Label" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "=== TOOLS ==="
+
+[node name="DemolishButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
+layout_mode = 2
+text = "DEMOLISH (50% refund)"
+
+[node name="SpawnButton" type="Button" parent="UI/ScrollContainer/BuildPanel"]
 layout_mode = 2
 text = "Spawn Person"
 
-[node name="VIPButton" type="Button" parent="UI/BuildPanel"]
-layout_mode = 2
-text = "VIP Visit (Test)"
-
 [node name="RentPopup" type="Panel" parent="UI"]
+visible = false
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
